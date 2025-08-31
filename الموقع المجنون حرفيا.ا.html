@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>زر الفوضى</title>
+<style>
+  body {
+    margin: 0;
+    overflow: hidden;
+    background-color: black;
+    transition: background-color 0.2s;
+  }
+  #chaosBtn {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    padding: 20px 40px;
+    font-size: 24px;
+    cursor: pointer;
+    z-index: 1000;
+  }
+  .emoji {
+    position: absolute;
+    font-size: 2rem;
+    animation: float 3s linear forwards;
+  }
+  @keyframes float {
+    to {
+      transform: translateY(-100vh) rotate(360deg);
+      opacity: 0;
+    }
+  }
+  .shake {
+    animation: shake 0.1s infinite;
+  }
+  @keyframes shake {
+    0% { transform: translate(0, 0); }
+    25% { transform: translate(5px, 0); }
+    50% { transform: translate(0, 5px); }
+    75% { transform: translate(-5px, 0); }
+    100% { transform: translate(0, -5px); }
+  }
+</style>
+</head>
+<body>
+<button id="chaosBtn">⚠️ اضغط لتفعيل الفوضى ⚠️</button>
+<audio id="music" src="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"></audio>
+
+<script>
+const btn = document.getElementById('chaosBtn');
+const music = document.getElementById('music');
+const emojis = ["😂","🔥","💥","😎","👾","🎉","🚀","💣","🕺","🐱"];
+
+function randomColor() {
+  return `hsl(${Math.random() * 360}, 100%, 50%)`;
+}
+
+function spawnEmoji() {
+  const e = document.createElement('div');
+  e.className = 'emoji';
+  e.style.left = Math.random() * window.innerWidth + 'px';
+  e.style.top = window.innerHeight + 'px';
+  e.textContent = emojis[Math.floor(Math.random() * emojis.length)];
+  document.body.appendChild(e);
+  setTimeout(() => e.remove(), 3000);
+}
+
+btn.addEventListener('click', () => {
+  btn.style.display = 'none';
+  music.play();
+  document.body.classList.add('shake');
+  setInterval(() => {
+    document.body.style.backgroundColor = randomColor();
+    spawnEmoji();
+  }, 200);
+});
+</script>
+</body>
+</html>

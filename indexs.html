@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>لا تضغطني أرجوك أنا بحذرك!</title>
+<style>
+  :root{ --h: 0; }
+  html,body{ height:100%; }
+  body{
+    margin:0; display:grid; place-items:center; overflow:hidden;
+    background: hsl(var(--h), 90%, 50%);
+    font-family: system-ui, Segoe UI, Arial, sans-serif; color:#fff;
+    transition: background 120ms linear;
+  }
+  .wrap{ text-align:center; padding:24px; }
+  h1{ margin:0 0 10px; font-size: clamp(24px, 6vw, 56px); text-shadow: 0 4px 24px rgba(0,0,0,.35); }
+  p{ margin:0 0 18px; opacity:.95; }
+  .btn{
+    font-size: clamp(18px, 4vw, 28px);
+    background:#111; color:#fff; border:2px solid rgba(255,255,255,.35);
+    border-radius:16px; padding:14px 22px; cursor:pointer; user-select:none;
+    box-shadow: 0 12px 30px rgba(0,0,0,.3), inset 0 0 0 0 rgba(255,255,255,.08);
+    transition: transform .15s, box-shadow .15s, background .2s;
+  }
+  .btn:hover{ transform: translateY(-2px); box-shadow: 0 16px 36px rgba(0,0,0,.35), inset 0 0 0 9999px rgba(255,255,255,.04); }
+  .btn:active{ transform: translateY(0); }
+  #stopBtn{
+    position: fixed; left: 12px; top: 12px; z-index: 10; font-size:16px;
+    padding:10px 14px; border-radius:12px; background: rgba(0,0,0,.45);
+    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  }
+
+  /* فقاعة "هَبّا!" */
+  .pop{
+    position: fixed; font-weight: 800; font-size: clamp(22px, 6vw, 48px);
+    text-shadow: 0 8px 28px rgba(0,0,0,.35);
+    animation: pop 700ms cubic-bezier(.2,.8,.2,1) forwards;
+    pointer-events:none;
+  }
+  @keyframes pop{
+    0%   { transform: translate(-50%,-50%) scale(.6) rotate(-6deg); opacity:0; }
+    30%  { transform: translate(-50%,-60%) scale(1.2) rotate(4deg); opacity:1; }
+    100% { transform: translate(-50%,-90%) scale(1) rotate(0); opacity:0; }
+  }
+
+  /* جسيمات الإيموجي */
+  .emo{
+    position: fixed; will-change: transform, opacity; pointer-events:none;
+    font-size: clamp(16px, 4vw, 28px);
+    animation: float 1.4s cubic-bezier(.17,.67,.32,1.34) forwards;
+  }
+  @keyframes float{
+    from{ transform: translate3d(var(--x,0), var(--y,0),0) rotate(var(--r,0deg)) scale(1); opacity:1; }
+    to  { transform: translate3d(calc(var(--x,0) + var(--dx,0px)), calc(var(--y,0) - 140px),0) rotate(calc(var(--r,0deg) + var(--dr,80deg))) scale(.9); opacity:0; }
+  }
+
+  /* تقليل الحركة */
+  @media (prefers-reduced-motion: reduce){
+    body{ transition: none; }
+    .emo, .pop{ animation: none !important; opacity:1 !important; }
+  }
+</style>
+</head>
+<body>
+  <button id="stopBtn" aria-label="إيقاف كل شيء">كفاية!</button>
+
+  <div class="wrap" aria-live="polite">
+    <h1>لا تضغطني</h1>
+    <p>بلاش… جد! لا تضغطني…</p>
+    <button id="btn" class="btn" aria-pressed="false" aria-label="زر لا تضغطني">🚫 لا تضغطني</button>
+  </div>
+
+<script>
+/* ============= موسيقى حماسية (Web Audio) ============= */
+const AudioCtx = window.AudioContext || window.webkitAudioContext;
+const ctx = new AudioCtx();
+const ensure = ()=> { if (ctx.state === 'suspended') ctx.resume(); };
+
+let running = false;
+let beatTimer = null, hueTimer = null, emoTimer = null;
+let step = 0; // عداد الإيقاع
+
+// عقدة رئيسية
+const master = ctx.createGain();
+master.gain.value = 0.7;
+master.connect(ctx.destination);
+
+// أدوات مساعدة
+const now = ()=> ctx.currentTime;
+function env(g, t, a=0.005, d=0.15, s=0.0001){
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(1.0, t + a);
+  g.gain.exponentialRampToValueAtTime(s, t + a + d);
+}
+
+function kick(t){
+  const o = ctx.createOscillator();
+  const g = ctx.createGain();
+  o.type = 'sine';
+  o.frequency.setValueAtTime(140, t);
+  o.frequency.exponentialRampToValueAtTime(50, t + 0.18);
+  env(g, t, 0.001, 0.18, 0.0001);
+  o.connect(g).connect(master);
+  o.start(t); o.stop(t + 0.2);
+}
+
+function snare(t){
+  // ضوضاء قصيرة (سنير)
+  const len = 0.18;
+  const buffer = ctx.createBuffer(1, ctx.sampleRate * len, ctx.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i=0;i<data.length;i++){ data[i] = Math.random()*2-1; }
+  const src = ctx.createBufferSource(); src.buffer = buffer;
+  const bp = ctx.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value = 1800; bp.Q.value = 0.6;
+  const g = ctx.createGain(); env(g, t, 0.001, len, 0.0001);
+  src.connect(bp).connect(g).connect(master);
+  src.start(t); src.stop(t + len);
+}
+
+function hat(t){
+  const o = ctx.createOscillator();
+  const g = ctx.createGain();
+  o.type = 'square';
+  o.frequency.setValueAtTime(8000, t);
+  env(g, t, 0.001, 0.05, 0.0001);
+  o.connect(g).connect(master);
+  o.start(t); o.stop(t + 0.05);
+}
+
+function lead(t, freq){
+  const o = ctx.createOscillator();
+  const g = ctx.createGain();
+  const f = ctx.createBiquadFilter(); f.type='lowpass'; f.frequency.value = 2500;
+  o.type = 'triangle';
+  o.frequency.value = freq;
+  env(g, t, 0.005, 0.18, 0.0001);
+  o.connect(f).connect(g).connect(master);
+  o.start(t); o.stop(t + 0.22);
+}
+
+function bass(t, freq){
+  const o = ctx.createOscillator();
+  const g = ctx.createGain();
+  o.type='sawtooth'; o.frequency.value = freq/2;
+  env(g, t, 0.005, 0.22, 0.0001);
+  o.connect(g).connect(master);
+  o.start(t); o.stop(t + 0.24);
+}
+
+// سلم مبهج (دو مي صول لا سي)
+const base = 220; // A3 تقريبًا
+const major = [0, 4, 7, 9, 11, 12, 16].map(semi => base * Math.pow(2, semi/12));
+const bassLine = [base, base*Math.pow(2,-5/12), base*Math.pow(2,-7/12), base]; // A, D, E, A
+
+function startMusic(){
+  ensure();
+  if (running) return;
+  running = true;
+
+  // فلاش أولي: أحمر -> أزرق -> أصفر
+  flashPrimaryColors();
+
+  const bpm = 150;
+  const interval = 60 / bpm; // ثانية للنبضة
+  const startT = now() + 0.05;
+
+  step = 0;
+  beatTimer = setInterval(()=>{
+    const t = startT + step * interval;
+
+    // إيقاع طبول
+    if (step % 4 === 0) kick(t);
+    if (step % 4 === 2) snare(t);
+    if (step % 1 === 0) hat(t);
+
+    // ليد مبهج
+    const note = major[step % major.length];
+    lead(t, note);
+
+    // باس كل نصف ميزان
+    if (step % 4 === 0) bass(t, bassLine[(step/4) % bassLine.length]);
+
+    step++;
+
+    // تحديث لون تدريجي بعد الومضات
+    if (!flashing) shiftHue(12);
+    // رشّة إيموجيز صغيرة مع الإيقاع
+    if (step % 2 === 0) burstEmojiRandom();
+  }, interval * 1000);
+
+  // موجة مستمرة من الإيموجيز
+  emoTimer = setInterval(()=> burstEmojiRandom(), 800);
+
+  // تدوير اللون التدرجي السلس
+  if (!hueTimer) {
+    hueTimer = setInterval(()=> { if (!flashing) shiftHue(1); }, 80);
+  }
+
+  // واجهة
+  btn.setAttribute('aria-pressed', 'true');
+  btn.textContent = 'قلت لك لا تضغطني! 😅';
+  popText('هَبّا!', window.innerWidth/2, window.innerHeight*0.65);
+}
+
+function stopAll(){
+  running = false;
+  clearInterval(beatTimer); beatTimer = null;
+  clearInterval(emoTimer); emoTimer = null;
+  // خفض الصوت تدريجيًا
+  const t = now();
+  master.gain.cancelScheduledValues(t);
+  master.gain.setValueAtTime(master.gain.value, t);
+  master.gain.exponentialRampToValueAtTime(0.0001, t + 0.3);
+  setTimeout(()=> { master.gain.value = 0.7; }, 400);
+  btn.setAttribute('aria-pressed', 'false');
+  btn.textContent = '🚫 لا تضغطني';
+}
+
+/* ============= الألوان ============= */
+let H = 0;
+let flashing = false;
+
+function setHue(h){
+  H = (h % 360 + 360) % 360;
+  document.documentElement.style.setProperty('--h', H);
+}
+function shiftHue(delta){ setHue(H + delta); }
+
+function flashPrimaryColors(){
+  flashing = true;
+  const seq = [
+    {h: 0,   delay: 0},    // أحمر
+    {h: 220, delay: 160},  // أزرق
+    {h: 55,  delay: 320},  // أصفر
+  ];
+  seq.forEach(({h, delay})=>{
+    setTimeout(()=> setHue(h), delay);
+  });
+  setTimeout(()=> { flashing = false; }, 520);
+}
+
+/* ============= الإيموجيز ============= */
+const EMOS = ['🤩','🔥','💥','🎉','✨','⚡','🎵','🎶','😎','🕺','💃','🎈','😜','🚀'];
+
+function burstEmoji(x, y, count = 22){
+  for (let i=0;i<count;i++){
+    const el = document.createElement('span');
+    el.className = 'emo';
+    el.textContent = EMOS[(Math.random()*EMOS.length)|0];
+    el.style.left = x + 'px'; el.style.top = y + 'px';
+    const a = Math.random()*Math.PI*2;
+    const s = 40 + Math.random()*120;
+    const dx = Math.cos(a)*s;
+    const r0 = (Math.random()*360)+'deg';
+    const dr = ((Math.random()*120)-60)+'deg';
+    el.style.setProperty('--x', '0px');
+    el.style.setProperty('--y', '0px');
+    el.style.setProperty('--dx', dx + 'px');
+    el.style.setProperty('--r', r0);
+    el.style.setProperty('--dr', dr);
+    document.body.appendChild(el);
+    setTimeout(()=> el.remove(), 1500);
+  }
+}
+function burstEmojiRandom(){
+  const x = Math.random()*window.innerWidth;
+  const y = Math.random()*window.innerHeight*0.7 + 40;
+  burstEmoji(x, y, 10 + (Math.random()*10|0));
+}
+
+/* ============= فقاعة "هبا!" ============= */
+function popText(txt, x, y){
+  const d = document.createElement('div');
+  d.className = 'pop'; d.textContent = txt;
+  d.style.left = x + 'px'; d.style.top = y + 'px';
+  document.body.appendChild(d);
+  setTimeout(()=> d.remove(), 800);
+}
+
+/* ============= تفاعل الواجهة ============= */
+const btn = document.getElementById('btn');
+const stopBtn = document.getElementById('stopBtn');
+
+btn.addEventListener('click', ()=>{
+  if (!running) startMusic();
+  else {
+    // لو مصمم تكمل ضغط، زوّد الإيموجيز واللون
+    burstEmojiRandom(); shiftHue(24); popText('قلت لك 😆', window.innerWidth/2, window.innerHeight*0.6);
+  }
+});
+stopBtn.addEventListener('click', stopAll);
+
+// تفعيل الصوت أول تفاعل
+window.addEventListener('click', ()=> ensure(), { once:true });
+
+// بداية لون افتراضي
+setHue(0);
+</script>
+</body>
+</html>
